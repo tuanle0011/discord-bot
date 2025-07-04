@@ -7,22 +7,23 @@ import sys
 import traceback
 import pytz
 from keep_alive import keep_alive
-from itertools import cycle  # thêm để xoay trạng thái
+from itertools import cycle
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "project"))
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN is None:
-    print("❌ Không tìm thấy token!")
+    print("<:HadeCross:1218836263180697684> Không tìm thấy token!")
     exit()
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
+intents.voice_states = True  # giữ lại nếu sau này phát nhạc
 
 bot = commands.Bot(command_prefix=".", intents=intents)
 
-# Dữ liệu người dùng
+# ===== DỮ LIỆU NGƯỜI DÙNG =====
 bot.user_balances = {}
 bot.user_daily = {}
 
@@ -36,7 +37,7 @@ def load_user_data():
                 for k, v in data.get("daily", {}).items()
             }
     except Exception as e:
-        print("❌ Lỗi khi load dữ liệu người dùng:", e)
+        print("<:HadeCross:1218836263180697684> Lỗi khi load dữ liệu người dùng:", e)
         bot.user_balances = {}
         bot.user_daily = {}
     print("✅ Dữ liệu người dùng đã được tải.")
@@ -52,7 +53,7 @@ def save_user_data():
 bot.save_user_data = save_user_data
 load_user_data()
 
-# 5p
+# ===== TRẠNG THÁI BOT =====
 status_messages = [
     "🎰 | lũ đú",
     "🎲 | play .tx 🎲",
@@ -67,31 +68,7 @@ async def change_status():
     activity = discord.Game(name=next(status_cycle))
     await bot.change_presence(status=discord.Status.online, activity=activity)
 
-# Leaderboard
-LEADERBOARD_CHANNEL_ID = 1389166293604892734
-
-@tasks.loop(minutes=30)
-async def send_daily_leaderboard():
-    channel = bot.get_channel(LEADERBOARD_CHANNEL_ID)
-    if channel:
-        sorted_users = sorted(bot.user_balances.items(), key=lambda x: x[1], reverse=True)
-        top_10 = sorted_users[:10]
-        embed = discord.Embed(
-            title="🌟 BẢNG XẾP HẠNG CẬP NHẬT THƯỜNG XUYÊN🪙",
-            description="Top 10 anh giàu nhất🪙",
-            color=discord.Color.gold(),
-            timestamp=datetime.datetime.utcnow()
-        )
-        for i, (user_id, balance) in enumerate(top_10, start=1):
-            try:
-                user = await bot.fetch_user(user_id)
-                name = user.name
-            except:
-                name = f"User ID: {user_id}"
-            embed.add_field(name=f"#{i} - {name}", value=f"{balance} 💵", inline=False)
-
-        await channel.send(embed=embed)
-
+# ===== LỆNH TOP =====
 @bot.command(name="top")
 async def top(ctx):
     sorted_users = sorted(bot.user_balances.items(), key=lambda x: x[1], reverse=True)
@@ -106,7 +83,7 @@ async def top(ctx):
         embed.add_field(name=f"#{i} - {name}", value=f"{balance} 💵", inline=False)
     await ctx.send(embed=embed)
 
-# Slash command
+# ===== SLASH COMMAND =====
 @bot.tree.command(name="help", description="Hiển thị danh sách lệnh")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(title="📖 Lệnh có sẵn", color=discord.Color.blue())
@@ -122,17 +99,19 @@ async def help_command(interaction: discord.Interaction):
 async def setbal_command(interaction: discord.Interaction, member: discord.Member, amount: int):
     ADMIN_ID = 1259533919041097809
     if interaction.user.id != ADMIN_ID:
-        return await interaction.response.send_message("❌ Chỉ admin mới có quyền dùng lệnh này.", ephemeral=True)
+        return await interaction.response.send_message("<:HadeCross:1218836263180697684> Chỉ anh Tuấn dz mới xài được lệnh này.", ephemeral=True)
     if amount < 0:
-        return await interaction.response.send_message("❌ Số dư phải ≥ 0.", ephemeral=True)
+        return await interaction.response.send_message("<:HadeCross:1218836263180697684> Số dư phải ≥ 0.", ephemeral=True)
     bot.user_balances[member.id] = amount
     bot.save_user_data()
     await interaction.response.send_message(f"✅ Đã đặt số dư của {member.mention} thành {amount} 💵.")
 
+# ===== BOT READY =====
 @bot.event
 async def on_ready():
-    change_status.start()  # 🟢 Bắt đầu xoay trạng thái
+    change_status.start()
     print(f"{bot.user} đã sẵn sàng!")
+
     try:
         await bot.load_extension("cogs.utils.economy")
         await bot.load_extension("cogs.taixiu")
@@ -142,16 +121,22 @@ async def on_ready():
         await bot.load_extension("cogs.ancap")
         print("✅ Đã tải tất cả cogs.")
     except Exception as e:
-        print(f"❌ Lỗi khi load cogs: {e}")
+        print(f" Lỗi khi load cogs: {e}")
         traceback.print_exception(type(e), e, e.__traceback__)
+
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ Slash command synced ({len(synced)} lệnh)")
+        GUILD_ID = discord.Object(id=1388762920594182255)
+        synced = await bot.tree.sync(guild=GUILD_ID)
+        print(f"✅ Slash command synced với guild {GUILD_ID.id} ({len(synced)} lệnh)")
+
+        if len(synced) == 0:
+            synced = await bot.tree.sync()
+            print(f"✅ Global slash command synced ({len(synced)} lệnh)")
     except Exception as e:
         print(f"❌ Lỗi sync slash command: {e}")
         traceback.print_exception(type(e), e, e.__traceback__)
-    send_daily_leaderboard.start()
 
+# ===== ERROR HANDLER =====
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
@@ -159,8 +144,9 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.CommandNotFound):
         pass
     else:
-        await ctx.send("❌ Đã xảy ra lỗi.")
+        await ctx.send("<:HadeCross:1218836263180697684> Đã xảy ra lỗi.")
         traceback.print_exception(type(error), error, error.__traceback__)
 
+# ===== KHỞI CHẠY =====
 keep_alive()
 bot.run(TOKEN)
