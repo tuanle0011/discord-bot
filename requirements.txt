@@ -1,2 +1,7 @@
 discord.py
 flask
+discord.py
+wavelink>=3.0.0
+PyNaCl
+aiohttp
+yt-dlp
